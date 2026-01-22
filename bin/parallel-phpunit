@@ -8,7 +8,8 @@ TMP=`mktemp -d 2> /dev/null`
 (test -n "${TMP}" && test -d "${TMP}") || ! TMP="/tmp/${PID}" || mkdir -p ${TMP} || exit 1
 ARGS="${@:1:$(($#-1))}" # remove last argument
 PHPUNIT_ARG=''
-CFG_MAX_THREAD=3
+# Auto-detect number of CPU cores for parallel threads
+CFG_MAX_THREAD=$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo 2>/dev/null || echo 3)
 CFG_PHPUNIT_CMD=`which phpunit 2>/dev/null || echo $0 | sed 's|parallel-phpunit$|phpunit|'`
 TEST_SUFFIX="Test.php,.phpt"
 TEST_FILTER="."
@@ -18,7 +19,7 @@ VERBOSE=false
 function show_help {
     echo "Paralleling options:"
     echo "    --pu-cmd - custom phpunit run script, default: first phpunit in PATH or phpunit next to parallel-phpunit"
-    echo "    --pu-threads - max threads, default $CFG_MAX_THREAD"
+    echo "    --pu-threads - max threads, default: auto-detected from CPU core count (currently $CFG_MAX_THREAD)"
     echo "    --pu-retries - how many times to rerun the test file if it fails"
     echo "    --pu-verbose - print all phpunit commands and their output, otherwise only failing commands are written"
     echo "Usage: parallel-phpunit [switches] <directory>"
@@ -110,10 +111,45 @@ function print_summary {
 }
 
 
+function xml_escape {
+    # Escape special XML characters: & < > " '
+    echo "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'\''/\&#39;/g'
+}
+
+
 function write_combined_junit {
     mkdir -p `dirname $1`
     echo "<testsuites>" > $1
-    find ${TMP}/ -name parallel-phpunit.*.junit -exec cat {} \; | grep -v "^<?xml" | grep -v testsuites >> $1
+    
+    # Process all per-thread junit files
+    for junit_file in $(find ${TMP}/ -name parallel-phpunit.*.junit 2>/dev/null | sort); do
+        if [ -s "$junit_file" ]; then
+            # File exists and has content, extract test cases
+            cat "$junit_file" | grep -v "^<?xml" | grep -v "^<testsuites>" | grep -v "^</testsuites>" >> $1
+        else
+            # JUnit file is empty or not created, check if phpunit had a fatal error
+            # Look for corresponding log file
+            log_file="${junit_file%.junit}.log"
+            if [ -f "$log_file" ]; then
+                # Check if phpunit exited with error and produced no output
+                # This indicates a Fatal Error or early termination
+                if [ ! -s "$junit_file" ] && grep -qi "fatal error\|error:" "$log_file"; then
+                    # Extract only the first error message line
+                    local error_msg=$(grep -i "fatal error\|^PHP.*error:" "$log_file" | head -1 | sed 's/^[^:]*: *//' | sed 's/in \/.*$//')
+                    # Escape XML special characters
+                    error_msg=$(xml_escape "$error_msg")
+                    cat >> $1 << EOF
+  <testsuite name="ParallelPHPUnit" errors="1" failures="0" tests="1" time="0">
+    <testcase name="FatalError" classname="Error" time="0">
+      <error type="Error" message="$error_msg" />
+    </testcase>
+  </testsuite>
+EOF
+                fi
+            fi
+        fi
+    done
+    
     echo "</testsuites>" >> $1
 }
 
@@ -168,6 +204,7 @@ function get_free_thread {
 function run_command {
     local exit_status=0
     local log_file=$1
+    local junit_file="${log_file%.log}.junit"
     shift
     for retry in `seq 0 $RETRIES`
     do
@@ -181,7 +218,17 @@ function run_command {
         $VERBOSE || echo "Command failed: $@"
         $VERBOSE || cat $log_file
         cat $log_file | perl -pe 's/\e\[?.*?[\@-~]//g' | grep "^[\.FESI][\.FESI]*$" | grep -q F
-        test $? -eq 0 || (echo F >> $log_file)
+        if [ $? -eq 0 ]; then
+            :
+        else
+            # Check if this is a Fatal Error or early termination
+            # Indicators: no junit file created, exit code non-zero, and error message in log
+            if [ ! -s "$junit_file" ] && [ $exit_status -ne 0 ] && grep -qi "fatal error\|error:" "$log_file" >/dev/null 2>&1; then
+                echo E >> $log_file
+            else
+                echo F >> $log_file
+            fi
+        fi
     done
     touch ${TMP}/fail
 }
@@ -262,4 +309,8 @@ done
 print_summary
 
 test -z "$junit_file" || write_combined_junit $junit_file
+
+# Ensure junit file is written before exit
+sleep 1
+
 ! test -f ${TMP}/fail
