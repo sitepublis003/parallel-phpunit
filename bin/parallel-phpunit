@@ -122,30 +122,25 @@ function write_combined_junit {
     echo "<testsuites>" > $1
     
     # Process all per-thread junit files
-    for junit_file in $(find ${TMP}/ -name parallel-phpunit.*.junit 2>/dev/null | sort); do
-        if [ -s "$junit_file" ]; then
-            # File exists and has content, extract test cases
-            cat "$junit_file" | grep -v "^<?xml" | grep -v "^<testsuites>" | grep -v "^</testsuites>" >> $1
-        else
-            # JUnit file is empty or not created, check if phpunit had a fatal error
-            # Look for corresponding log file
-            log_file="${junit_file%.junit}.log"
-            if [ -f "$log_file" ]; then
-                # Check if phpunit exited with error and produced no output
-                # This indicates a Fatal Error or early termination
-                if [ ! -s "$junit_file" ] && grep -qi "fatal error\|error:" "$log_file"; then
-                    # Extract only the first error message line
-                    local error_msg=$(grep -i "fatal error\|^PHP.*error:" "$log_file" | head -1 | sed 's/^[^:]*: *//' | sed 's/in \/.*$//')
-                    # Escape XML special characters
-                    error_msg=$(xml_escape "$error_msg")
-                    cat >> $1 << EOF
+    find ${TMP}/ -name parallel-phpunit.*.junit 2>/dev/null | sort | xargs -r cat | grep -v "^<?xml" | grep -v "^<testsuites>" | grep -v "^</testsuites>" >> $1
+    
+    # Process log files that don't have corresponding junit files (error cases)
+    for log_file in $(find ${TMP}/ -name parallel-phpunit.*.log 2>/dev/null | sort); do
+        junit_file="${log_file%.log}.junit"
+        if [ ! -f "$junit_file" ]; then
+            # Check if phpunit exited with error
+            if grep -qi "An error\|fatal error\|^PHP" "$log_file"; then
+                # Extract entire error output from log file
+                local error_output=$(cat "$log_file" | perl -pe 's/\e\[?.*?[\@-~]//g')
+                # Escape XML special characters
+                error_output=$(xml_escape "$error_output")
+                cat >> $1 << EOF
   <testsuite name="ParallelPHPUnit" errors="1" failures="0" tests="1" time="0">
     <testcase name="FatalError" classname="Error" time="0">
-      <error type="Error" message="$error_msg" />
+      <error type="Error" message="$error_output" />
     </testcase>
   </testsuite>
 EOF
-                fi
             fi
         fi
     done
@@ -312,5 +307,7 @@ test -z "$junit_file" || write_combined_junit $junit_file
 
 # Ensure junit file is written before exit
 sleep 1
+
+! test -f ${TMP}/fail
 
 ! test -f ${TMP}/fail
