@@ -306,8 +306,12 @@ print_summary
 test -z "$junit_file" || write_combined_junit $junit_file
 
 # Ensure junit file is written before exit
-sleep 1
-
-! test -f ${TMP}/fail
+if [ -n "$junit_file" ]; then
+    count=0
+    while [ ! -s "$junit_file" ] && [ $count -lt 50 ]; do
+        sleep 0.1
+        count=$((count+1))
+    done
+fi
 
 ! test -f ${TMP}/fail
