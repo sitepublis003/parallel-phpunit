@@ -124,26 +124,22 @@ function write_combined_junit {
     # Process all per-thread junit files
     find ${TMP}/ -name parallel-phpunit.*.junit 2>/dev/null | sort | xargs -r cat | grep -v "^<?xml" | grep -v "^<testsuites>" | grep -v "^</testsuites>" >> $1
     
-    # Process log files that don't have corresponding junit files (error cases)
-    for log_file in $(find ${TMP}/ -name parallel-phpunit.*.log 2>/dev/null | sort); do
-        junit_file="${log_file%.log}.junit"
-        if [ ! -f "$junit_file" ]; then
-            # Check if phpunit exited with error
-            if grep -qi "An error\|fatal error\|^PHP" "$log_file"; then
-                # Extract entire error output from log file
-                local error_output=$(cat "$log_file" | perl -pe 's/\e\[?.*?[\@-~]//g')
-                # Escape XML special characters
+        # First, process sentinel error files created by run_command
+        for error_file in $(find ${TMP}/ -name 'parallel-phpunit.*.junit.error' 2>/dev/null | sort); do
+            junit_file="${error_file%.error}"
+            # Only add if the junit file does not exist
+            if [ ! -f "$junit_file" ]; then
+                error_output=$(cat "$error_file")
                 error_output=$(xml_escape "$error_output")
                 cat >> $1 << EOF
-  <testsuite name="ParallelPHPUnit" errors="1" failures="0" tests="1" time="0">
-    <testcase name="FatalError" classname="Error" time="0">
-      <error type="Error" message="$error_output" />
-    </testcase>
-  </testsuite>
+        <testsuite name="ParallelPHPUnit" errors="1" failures="0" tests="1" time="0">
+            <testcase name="FatalError" classname="Error" time="0">
+                <error type="Error" message="$error_output" />
+            </testcase>
+        </testsuite>
 EOF
             fi
-        fi
-    done
+        done
     
     echo "</testsuites>" >> $1
 }
@@ -205,24 +201,23 @@ function run_command {
     do
         test 0 -eq $retry || echo "Retry($retry/$RETRIES): $@"
         ! $VERBOSE || echo "Starting command: $@"
-        $@ &> $log_file
+        $@ >"$log_file" 2>"${log_file}.err"
         exit_status=$?
         ! $VERBOSE || echo "Command ended: $@"
         ! $VERBOSE || cat $log_file
         test $exit_status -eq 0 && return $exit_status
         $VERBOSE || echo "Command failed: $@"
-        $VERBOSE || cat $log_file
+        $VERBOSE || cat $log_file "${log_file}.err"
         cat $log_file | perl -pe 's/\e\[?.*?[\@-~]//g' | grep "^[\.FESI][\.FESI]*$" | grep -q F
-        if [ $? -eq 0 ]; then
-            :
-        else
-            # Check if this is a Fatal Error or early termination
-            # Indicators: no junit file created, exit code non-zero, and error message in log
-            if [ ! -s "$junit_file" ] && [ $exit_status -ne 0 ] && grep -qi "fatal error\|error:" "$log_file" >/dev/null 2>&1; then
-                echo E >> $log_file
+        if [ $? -ne 0 ] && [ ! -s "$junit_file" ]; then
+            error_file="${junit_file}.error"
+            if [ -s "${log_file}.err" ]; then
+                mv "${log_file}.err" "$error_file"
             else
-                echo F >> $log_file
+                cat "$log_file" | perl -pe 's/\e\[?.*?[\@-~]//g' > "$error_file"
             fi
+            echo E >> $log_file
+            return $exit_status
         fi
     done
     touch ${TMP}/fail
