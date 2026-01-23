@@ -121,25 +121,20 @@ function write_combined_junit {
     mkdir -p `dirname $1`
     echo "<testsuites>" > $1
     
-    # Process all per-thread junit files
     find ${TMP}/ -name parallel-phpunit.*.junit 2>/dev/null | sort | xargs -r cat | grep -v "^<?xml" | grep -v "^<testsuites>" | grep -v "^</testsuites>" >> $1
     
-        # First, process sentinel error files created by run_command
-        for error_file in $(find ${TMP}/ -name 'parallel-phpunit.*.junit.error' 2>/dev/null | sort); do
-            junit_file="${error_file%.error}"
-            # Only add if the junit file does not exist
-            if [ ! -f "$junit_file" ]; then
-                error_output=$(cat "$error_file")
-                error_output=$(xml_escape "$error_output")
-                cat >> $1 << EOF
-        <testsuite name="ParallelPHPUnit" errors="1" failures="0" tests="1" time="0">
-            <testcase name="FatalError" classname="Error" time="0">
-                <error type="Error" message="$error_output" />
-            </testcase>
-        </testsuite>
+    for error_file in $(find ${TMP}/ -name 'parallel-phpunit.*.junit.error' 2>/dev/null | sort); do
+        junit_file="${error_file%.error}"
+        error_output=$(cat "$error_file")
+        error_output=$(xml_escape "$error_output")
+        cat >> $1 << EOF
+    <testsuite name="ParallelPHPUnit" errors="1" failures="0" tests="1" time="0">
+        <testcase name="FatalError" classname="Error" time="0">
+            <error type="Error" message="$error_output" />
+        </testcase>
+    </testsuite>
 EOF
-            fi
-        done
+    done
     
     echo "</testsuites>" >> $1
 }
