@@ -56,4 +56,25 @@ class ParallelPhpUnitTest extends TestCase
             $this->fail("Summary format incorrect: " . $summary);
         }
     }
+
+    public function testLargeStatusCounts()
+    {
+        $testDir = __DIR__ . "/../example/large_tests";
+        $output = $this->runParallelPHPUnit("--test-suffix LargeTest.php " . $testDir, 1); // Expect failures from LargeTest
+        $lines = explode("\n", $output);
+        $summary = end($lines);
+
+        if (preg_match('/Success: (\d+) Fail: (\d+) Error: (\d+) Skip: (\d+) Incomplete: (\d+) Risky: (\d+) Warning: (\d+) Deprecation: (\d+)/', $summary, $matches)) {
+            $this->assertEquals(9, (int)$matches[1]); // successes
+            $this->assertEquals(8, (int)$matches[2]); // failures
+            $this->assertEquals(8, (int)$matches[3]); // errors
+            $this->assertEquals(9, (int)$matches[4]); // skipped
+            $this->assertEquals(8, (int)$matches[5]); // incomplete
+            $this->assertEquals(8, (int)$matches[6]); // risky
+            $this->assertEquals(0, (int)$matches[7]); // No warning
+            $this->assertEquals(0, (int)$matches[8]); // No deprecation
+        } else {
+            $this->fail("Summary format incorrect: " . $summary);
+        }
+    }
 }
