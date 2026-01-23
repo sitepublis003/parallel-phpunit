@@ -77,4 +77,27 @@ class ParallelPhpUnitTest extends TestCase
             $this->fail("Summary format incorrect: " . $summary);
         }
     }
+
+    public function testParallelFiveThreadsCompletesQuickly()
+    {
+        $testDir = __DIR__ . "/parallel";
+        $arguments = "--pu-threads 5 " . $testDir;
+
+        $start = microtime(true);
+        $output = $this->runParallelPHPUnit($arguments, 0);
+        $duration = microtime(true) - $start;
+
+        $lines = explode("\n", $output);
+        $summary = end($lines);
+
+        if (preg_match('/Success: (\d+) Fail: (\d+) Error: (\d+) Skip: (\d+) Incomplete: (\d+) Risky: (\d+) Warning: (\d+) Deprecation: (\d+)/', $summary, $matches)) {
+            $this->assertEquals(10, (int)$matches[1]);
+            $this->assertEquals(0, (int)$matches[2]);
+            $this->assertEquals(0, (int)$matches[3]);
+        } else {
+            $this->fail("Summary format incorrect: " . $summary);
+        }
+
+        $this->assertLessThanOrEqual(4.0, $duration, "Parallel run took too long: {$duration} seconds");
+    }
 }
