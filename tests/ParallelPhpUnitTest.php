@@ -100,4 +100,46 @@ class ParallelPhpUnitTest extends TestCase
 
         $this->assertLessThanOrEqual(4.0, $duration, "Parallel run took too long: {$duration} seconds");
     }
+
+    public function testFatalErrorNotRetriedAndReported()
+    {
+        $junit = sys_get_temp_dir() . '/parallel-phpunit-fatal.junit';
+        if (file_exists($junit)) {
+            unlink($junit);
+        }
+
+        $testDir = __DIR__ . '/fatal';
+        $arguments = "--pu-retries 1 --log-junit $junit " . $testDir;
+
+        $output = $this->runParallelPHPUnit($arguments, 1);
+
+        // 1) Fatal Error should not be retried (no "Retry(" lines)
+        $this->assertFalse(strstr($output, 'Retry('));
+
+        // 2) Fatal Errors should be counted as Errors in the summary
+        $lines = explode("\n", $output);
+        $summary = end($lines);
+        $this->assertTrue(strpos($summary, 'Error: 2') !== false, "Expected Error: 2 in summary, got: $summary");
+
+        // 3) JUnit XML should contain the FatalError entry / message
+        $this->assertFileExists($junit);
+        $xml = file_get_contents($junit);
+        // If DOMDocument is available, validate JUnit XML syntax and fail on parse errors.
+        if (class_exists('DOMDocument')) {
+            libxml_use_internal_errors(true);
+            $doc = new DOMDocument();
+            $ok = $doc->loadXML($xml);
+            if (! $ok) {
+                $errors = [];
+                foreach (libxml_get_errors() as $e) {
+                    $errors[] = trim($e->message) . ' at line ' . $e->line;
+                }
+                libxml_clear_errors();
+                $this->fail('Invalid JUnit XML: ' . implode('; ', $errors));
+            }
+        }
+        $this->assertTrue(strpos($xml, 'FatalError') !== false, 'Expected FatalError entry in junit xml');
+        $this->assertTrue(strpos($xml, 'Parse error') !== false || strpos($xml, 'syntax error') !== false, 'Expected fatal message in junit xml');
+        $this->assertTrue(strpos($xml, 'Declaration of ChildForTest') !== false || strpos($xml, 'someMethod(): string must be compatible') !== false, 'Expected incompatible interface message in junit xml');
+    }
 }
