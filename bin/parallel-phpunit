@@ -215,7 +215,7 @@ function run_command {
             else
                 cat "$log_file" | perl -pe 's/\e\[?.*?[\@-~]//g' > "$error_file"
             fi
-            echo E >> $log_file
+            echo "E " >> $log_file
             break
         fi
     done
