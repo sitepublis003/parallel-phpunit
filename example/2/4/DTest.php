@@ -1,5 +1,7 @@
 <?php
-class DTest extends PHPUnit_Framework_TestCase
+use PHPUnit\Framework\TestCase;
+
+class DTest extends TestCase
 {
     public function testIt()
     {

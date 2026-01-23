@@ -1,5 +1,8 @@
 <?php
-class FailEverySecondTime extends PHPUnit_Framework_TestCase
+
+use PHPUnit\Framework\TestCase;
+
+class FailEverySecondTime extends TestCase
 {
     public function test()
     {

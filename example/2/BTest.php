@@ -1,5 +1,7 @@
 <?php
-class BTest extends PHPUnit_Framework_TestCase
+use PHPUnit\Framework\TestCase;
+
+class BTest extends TestCase
 {
     /**
      * @group b

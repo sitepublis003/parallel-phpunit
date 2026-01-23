@@ -1,12 +1,13 @@
 #!/bin/bash
 set -f
 VERSION='1.3.0'
+PROGRESS_PATTERN="^[\.FESIRWD][\.FESIRWD]*[ 0-9/%()]*$"
 PID=$$
 ROOT="${@: -1}" # last argument
 ROOT="${ROOT%/}" # strip the last slash
 TMP=`mktemp -d 2> /dev/null`
 (test -n "${TMP}" && test -d "${TMP}") || ! TMP="/tmp/${PID}" || mkdir -p ${TMP} || exit 1
-ARGS="${@:1:$(($#-1))}" # remove last argument
+if [ $# -eq 0 ]; then ARGS=""; else ARGS="${@:1:$(($#-1))}"; fi # remove last argument
 PHPUNIT_ARG=''
 # Auto-detect number of CPU cores for parallel threads
 CFG_MAX_THREAD=$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo 2>/dev/null || echo 3)
@@ -105,9 +106,8 @@ function count {
 
 
 function print_summary {
-    progress=`find ${TMP}/ -name "parallel-phpunit.*.log" -exec cat {} \; -exec echo \; | perl -pe 's/\e\[?.*?[\@-~]//g' | grep "^[\.FESI][\.FESI]*$"`
-    progress=$progress`find ${TMP}/ -name parallel-phpunit.*.log -exec cat {} \; -exec echo \; | perl -pe 's/\e\[?.*?[\@-~]//g' | grep "^[\.FESI][\.FESI]* " | sed 's| .*||'`
-    echo "Success: `count '\.'` Fail: `count F` Error: `count E` Skip: `count S` Incomplete: `count I`"
+    progress=`find ${TMP}/ -name "parallel-phpunit.*.log" -exec cat {} \; -exec echo \; | perl -pe 's/\e\[?.*?[\@-~]//g' | grep "$PROGRESS_PATTERN" | sed 's| .*||'`
+    echo "Success: `count '\.'` Fail: `count F` Error: `count E` Skip: `count S` Incomplete: `count I` Risky: `count R` Warning: `count W` Deprecation: `count D`"
 }
 
 
@@ -208,8 +208,8 @@ function run_command {
         test $exit_status -eq 0 && return $exit_status
         $VERBOSE || echo "Command failed: $@"
         $VERBOSE || cat $log_file "${log_file}.err"
-        cat $log_file | perl -pe 's/\e\[?.*?[\@-~]//g' | grep "^[\.FESI][\.FESI]*$" | grep -q F
-        if [ $? -ne 0 ] && [ ! -s "$junit_file" ]; then
+        cat $log_file | perl -pe 's/\e\[?.*?[\@-~]//g' | grep "$PROGRESS_PATTERN" | grep -q F
+        if [ $? -ne 0 ]; then
             error_file="${junit_file}.error"
             if [ -s "${log_file}.err" ]; then
                 mv "${log_file}.err" "$error_file"
@@ -217,7 +217,7 @@ function run_command {
                 cat "$log_file" | perl -pe 's/\e\[?.*?[\@-~]//g' > "$error_file"
             fi
             echo E >> $log_file
-            return $exit_status
+            break
         fi
     done
     touch ${TMP}/fail

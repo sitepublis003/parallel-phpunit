@@ -1,5 +1,7 @@
 <?php
-class GTest extends PHPUnit_Framework_TestCase
+use PHPUnit\Framework\TestCase;
+
+class GTest extends TestCase
 {
     public function testIt()
     {
