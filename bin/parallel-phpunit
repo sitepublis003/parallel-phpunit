@@ -208,8 +208,7 @@ function run_command {
         test $exit_status -eq 0 && return $exit_status
         $VERBOSE || echo "Command failed: $@"
         $VERBOSE || cat $log_file "${log_file}.err"
-        cat $log_file | perl -pe 's/\e\[?.*?[\@-~]//g' | grep "$PROGRESS_PATTERN" | grep -q F
-        if [ $? -ne 0 ]; then
+        if [ $exit_status -ge 128 ]; then
             error_file="${junit_file}.error"
             if [ -s "${log_file}.err" ]; then
                 mv "${log_file}.err" "$error_file"
