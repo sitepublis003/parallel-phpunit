@@ -6,7 +6,7 @@ class ParallelPhpUnitTest extends TestCase
 {
     public function testRetries()
     {
-        $arguments = " --test-suffix FailEverySecondTime.php " . (__DIR__ . "/../example/retries");
+        $arguments = " --test-suffix FailEverySecondTime.php " . (__DIR__ . "/retries");
         file_put_contents("/tmp/failTheTest", "");
         $this->runParallelPHPUnit($arguments, 1);
         file_put_contents("/tmp/failTheTest", "");
@@ -38,7 +38,7 @@ class ParallelPhpUnitTest extends TestCase
 
     public function testStatusCounts()
     {
-        $testDir = __DIR__ . "/../example/status_tests";
+        $testDir = __DIR__ . "/status";
         $output = $this->runParallelPHPUnit($testDir, 1); // Expect exit 1 due to failures
         $lines = explode("\n", $output);
         $summary = end($lines);
@@ -59,7 +59,7 @@ class ParallelPhpUnitTest extends TestCase
 
     public function testLargeStatusCounts()
     {
-        $testDir = __DIR__ . "/../example/large_tests";
+        $testDir = __DIR__ . "/large";
         $output = $this->runParallelPHPUnit("--test-suffix LargeTest.php " . $testDir, 1); // Expect failures from LargeTest
         $lines = explode("\n", $output);
         $summary = end($lines);
