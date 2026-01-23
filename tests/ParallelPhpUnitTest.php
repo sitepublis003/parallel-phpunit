@@ -6,7 +6,7 @@ class ParallelPhpUnitTest extends TestCase
 {
     public function testRetries()
     {
-        $arguments = " --test-suffix FailEverySecondTime.php " . __DIR__;
+        $arguments = " --test-suffix FailEverySecondTime.php " . (__DIR__ . "/../example/retries");
         file_put_contents("/tmp/failTheTest", "");
         $this->runParallelPHPUnit($arguments, 1);
         file_put_contents("/tmp/failTheTest", "");
