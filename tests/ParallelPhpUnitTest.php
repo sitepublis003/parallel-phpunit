@@ -27,6 +27,10 @@ class ParallelPhpUnitTest extends TestCase
 
     private function runParallelPHPUnit($arguments, $expectedExitStatus = 0)
     {
+        if (($phpunitCmd = $_SERVER['argv'][0] ?? null) && ($phpunitCmd = realpath($phpunitCmd))) {
+            $arguments = '--pu-cmd ' . escapeshellarg($phpunitCmd) . ' ' . $arguments;
+        }
+
         $command = __DIR__ . "/../bin/parallel-phpunit " . $arguments;
         $output = array();
         $exitStatus = -1;
@@ -73,6 +77,27 @@ class ParallelPhpUnitTest extends TestCase
             $this->assertEquals(8, (int)$matches[6]); // risky
             $this->assertEquals(0, (int)$matches[7]); // No warning
             $this->assertEquals(0, (int)$matches[8]); // No deprecation
+        } else {
+            $this->fail("Summary format incorrect: " . $summary);
+        }
+    }
+
+    public function testWarningAndDeprecationCounts()
+    {
+        $testDir = __DIR__ . "/warnings";
+        $output = $this->runParallelPHPUnit($testDir, 0);
+        $lines = explode("\n", $output);
+        $summary = end($lines);
+
+        if (preg_match('/Success: (\d+) Fail: (\d+) Error: (\d+) Skip: (\d+) Incomplete: (\d+) Risky: (\d+) Warning: (\d+) Deprecation: (\d+)/', $summary, $matches)) {
+            $this->assertEquals(0, (int)$matches[1]);
+            $this->assertEquals(0, (int)$matches[2]);
+            $this->assertEquals(0, (int)$matches[3]);
+            $this->assertEquals(0, (int)$matches[4]);
+            $this->assertEquals(0, (int)$matches[5]);
+            $this->assertEquals(0, (int)$matches[6]);
+            $this->assertEquals(1, (int)$matches[7]);
+            $this->assertEquals(1, (int)$matches[8]);
         } else {
             $this->fail("Summary format incorrect: " . $summary);
         }
